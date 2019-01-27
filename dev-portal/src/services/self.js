@@ -140,7 +140,7 @@ function setCredentials(cognitoUser) {
       return Promise.reject(error)
     }
 
-    initApiGatewayClient(AWS.config.credentials)
+    initApiGatewayClient(cognitoUser.signInUserSession.accessToken.jwtToken)
     updateAllUserData()
 
     return apiGatewayClient()
