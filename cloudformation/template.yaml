@@ -998,6 +998,62 @@ Resources:
       ServiceToken: !GetAtt CognitoUserPoolDomainBackingFn.Arn
       UserPoolId: !Ref CognitoUserPool
       Domain: !Ref CognitoDomainNameOrPrefix
+
+  CognitoResourceServerBackingFnRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Effect: Allow
+            Action: 'sts:AssumeRole'
+            Principal:
+              Service: lambda.amazonaws.com
+      Policies:
+        - PolicyName: WriteCloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+        - PolicyName: ManageResourceServer
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action: 'cognito-idp:CreateResourceServer'
+                Resource: 'arn:aws:cognito-idp:*:*:userpool/*'
+              -
+                Effect: Allow
+                Action: 'cognito-idp:DeleteResourceServer'
+                Resource: 'arn:aws:cognito-idp:*:*:userpool/*'
+
+  CognitoResourceServerBackingFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs8.10
+      MemorySize: 128
+      Timeout: 300
+      CodeUri: ../lambdas/cfn-cognito-resource-server
+      Handler: index.handler
+      Role: !GetAtt CognitoResourceServerBackingFnRole.Arn
+
+  CognitoResourceServer:
+    Type: AWS::CloudFormation::CustomResource
+    # This should probably /always/ be created?
+    Condition: UseCognitoHostedUI
+    Properties:
+      Timeout: 360
+      ServiceToken: !GetAtt CognitoResourceServerBackingFn.Arn
+      UserPoolId: !Ref CognitoUserPool
+      Identifier: !Join ['', [!Ref 'AWS::StackName', '-resource-server']]
   
   CognitoIdentityPool:
     Type: AWS::Cognito::IdentityPool
