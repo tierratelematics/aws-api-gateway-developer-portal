@@ -906,6 +906,7 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource: 'arn:aws:logs:*:*:*'
+        # Should this be scoped down now that there are two?
         - PolicyName: UpdateUserPoolClient
           PolicyDocument: 
             Version: '2012-10-17'
@@ -998,6 +999,89 @@ Resources:
       ServiceToken: !GetAtt CognitoUserPoolDomainBackingFn.Arn
       UserPoolId: !Ref CognitoUserPool
       Domain: !Ref CognitoDomainNameOrPrefix
+
+  CognitoAdminUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Join ['', !Ref CognitoIdentityPoolName, 'Admins']
+#      LambdaConfig:
+#        PreSignUp: !GetAtt CognitoUserPoolsConfirmationStrategyFunction.Arn
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+      Schema:
+        - AttributeDataType: String
+          Name: email
+          Required: false
+
+  CognitoAdminUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref CognitoAdminUserPool
+      ClientName: CognitoAdminIdentityPool
+      GenerateSecret: false
+      RefreshTokenValidity: 30
+
+  CognitoAdminUserPoolClientSettingsBackingFnRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Effect: Allow
+            Action: 'sts:AssumeRole'
+            Principal:
+              Service: lambda.amazonaws.com
+      Policies:
+        - PolicyName: WriteCloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+        # Should this be scoped down now that there are two?
+        - PolicyName: UpdateUserPoolClient
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              -
+                Effect: Allow
+                Action: 'cognito-idp:UpdateUserPoolClient'
+                Resource: 'arn:aws:cognito-idp:*:*:userpool/*'
+
+  CognitoAdminUserPoolClientSettingsBackingFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs8.10
+      MemorySize: 128
+      Timeout: 300
+      CodeUri: ../lambdas/cfn-cognito-user-pools-client-settings
+      Handler: index.handler
+      Role: !GetAtt CognitoUserPoolClientSettingsBackingFnRole.Arn
+
+  CognitoAdminUserPoolClientSettings:
+    Type: AWS::CloudFormation::CustomResource
+    # This should probably /always/ be created?
+    Condition: UseCognitoHostedUI
+    Properties:
+      Timeout: 360
+      ServiceToken: !GetAtt CognitoUserPoolClientSettingsBackingFn.Arn
+      UserPoolId: !Ref CognitoAdminUserPool
+      UserPoolClientId: !Ref CognitoAdminUserPoolClient
+      SupportedIdentityProviders: [ "COGNITO" ] # should (eventually) allow people to add values
+      CallbackURL: !Join ['', [ 'https://', !If [ UseCustomDomainName, !Ref CustomDomainName, !GetAtt DefaultCloudfrontDistribution.DomainName ], '/login' ]]
+      LogoutURL: !Join ['', [ 'https://', !If [ UseCustomDomainName, !Ref CustomDomainName, !GetAtt DefaultCloudfrontDistribution.DomainName ]]]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [ "implicit" ]
+      AllowedOAuthScopes: [ "openid", !Join ['', [!Ref 'AWS::StackName', '-resource-server/user-access']], !Join ['', [!Ref 'AWS::StackName', '-resource-server/admin-access']] ]
 
   CognitoResourceServerBackingFnRole:
     Type: 'AWS::IAM::Role'
