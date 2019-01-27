@@ -8,8 +8,8 @@ const apigateway = new AWS.APIGateway()
 const domain = `${process.env.CLIENT_BUCKET_NAME}.s3-website-${process.env.AWS_DEFAULT_REGION}.amazonaws.com`
 const baseUrl = `http://${domain}/`
 
-function getCognitoIdentityId(req) {
-    return req.apiGateway.event.requestContext.identity.cognitoIdentityId
+function getCognitoUsername(req) {
+    return req.apiGateway.event.requestContext.authorizer.claims.username
 }
 
 function getUsagePlanFromCatalog(usagePlanId) {
@@ -18,7 +18,7 @@ function getUsagePlanFromCatalog(usagePlanId) {
 }
 
 function postSignIn(req, res) {
-    const cognitoIdentityId = getCognitoIdentityId(req)
+    const userName = getCognitoUsername(req)
 
     function errFunc(data) {
         console.log(`error: ${data}`)
@@ -26,26 +26,26 @@ function postSignIn(req, res) {
     }
 
     // ensure an API Key exists for this customer and that the Cognito identity and API Key Id are tracked in DDB
-    customersController.getApiKeyForCustomer(cognitoIdentityId, errFunc, (data) => {
+    customersController.getApiKeyForCustomer(userName, errFunc, (data) => {
         console.log(`Get Api Key data ${JSON.stringify(data)}`)
 
         if (data.items.length === 0) {
-            console.log(`No API Key found for customer ${cognitoIdentityId}`)
+            console.log(`No API Key found for customer ${userName}`)
 
-            customersController.createApiKey(cognitoIdentityId, errFunc, (createData) => {
+            customersController.createApiKey(userName, errFunc, (createData) => {
                 console.log(`Create API Key data: ${createData}`)
                 const keyId = createData.id
 
                 console.log(`Got key ID ${keyId}`)
 
-                customersController.ensureCustomerItem(cognitoIdentityId, keyId, errFunc, () => {
+                customersController.ensureCustomerItem(userName, keyId, errFunc, () => {
                     res.status(200).json({})
                 })
             })
         } else {
             const keyId = data.items[0].id
 
-            customersController.ensureCustomerItem(cognitoIdentityId, keyId, errFunc, () => {
+            customersController.ensureCustomerItem(userName, keyId, errFunc, () => {
                 res.status(200).json({})
             })
         }
@@ -59,14 +59,14 @@ function getCatalog(req, res) {
 }
 
 function getApiKey(req, res) {
-    const cognitoIdentityId = getCognitoIdentityId(req)
+    const cognitoUsername = getCognitoUsername(req)
 
     function errFunc(data) {
         console.log(`error: ${data}`)
         res.status(500).json(data)
     }
 
-    customersController.getApiKeyForCustomer(cognitoIdentityId, errFunc, (data) => {
+    customersController.getApiKeyForCustomer(cognitoUsername, errFunc, (data) => {
         if (data.items.length === 0) {
             res.status(404).json('No API Key for customer')
         } else {
@@ -81,20 +81,20 @@ function getApiKey(req, res) {
 }
 
 function getSubscriptions(req, res) {
-    console.log(`GET /subscriptions for Cognito ID: ${req.apiGateway.event.requestContext.identity.cognitoIdentityId}`)
+    console.log(`GET /subscriptions for Cognito user: ${ getCognitoUsername(req) }`)
 
     function errFunc(data) {
         console.log(`error: ${data}`)
         res.status(500).json(data)
     }
 
-    customersController.getUsagePlansForCustomer(req.apiGateway.event.requestContext.identity.cognitoIdentityId, errFunc, (data) => {
+    customersController.getUsagePlansForCustomer(getCognitoUsername(req), errFunc, (data) => {
         res.status(200).json(data.items)
     })
 }
 
 function putSubscription(req, res) {
-    const cognitoIdentityId = getCognitoIdentityId(req)
+    const cognitoUsername = getCognitoUsername(req)
     const usagePlanId = req.params.usagePlanId
 
     getUsagePlanFromCatalog(usagePlanId).then((usagePlan) => {
@@ -112,13 +112,13 @@ function putSubscription(req, res) {
         if (!isUsagePlanInCatalog) {
             res.status(404).json('Invalid Usage Plan ID')
         } else {
-            customersController.subscribe(cognitoIdentityId, usagePlanId, error, success)
+            customersController.subscribe(cognitoUsername, usagePlanId, error, success)
         }
     })
 }
 
 function getUsage(req, res) {
-    const cognitoIdentityId = getCognitoIdentityId(req)
+    const cognitoUsername = getCognitoUsername(req)
     const usagePlanId = req.params.usagePlanId
 
     function errFunc(data) {
@@ -133,7 +133,7 @@ function getUsage(req, res) {
         if (!isUsagePlanInCatalog) {
             res.status(404).json('Invalid Usage Plan ID')
         } else {
-            customersController.getApiKeyForCustomer(cognitoIdentityId, errFunc, (data) => {
+            customersController.getApiKeyForCustomer(cognitoUsername, errFunc, (data) => {
                 const keyId = data.items[0].id
 
                 const params = {
@@ -159,7 +159,7 @@ function getUsage(req, res) {
 }
 
 function deleteSubscription(req, res) {
-    const cognitoIdentityId = getCognitoIdentityId(req)
+    const cognitoUsername = getCognitoUsername(req)
     const usagePlanId = req.params.usagePlanId
 
     function error(data) {
@@ -177,7 +177,7 @@ function deleteSubscription(req, res) {
         if (!isUsagePlanInCatalog) {
             res.status(404).json('Invalid Usage Plan ID')
         } else {
-            customersController.unsubscribe(cognitoIdentityId, usagePlanId, error, success)
+            customersController.unsubscribe(cognitoUsername, usagePlanId, error, success)
         }
     })
 }
@@ -211,8 +211,8 @@ function putMarketplaceSubscription(req, res) {
     const marketplaceToken = req.body.token
     const usagePlanId = req.params.usagePlanId
     console.log(`Marketplace token: ${marketplaceToken} usage plan id: ${usagePlanId}`)
-    const cognitoIdentityId = getCognitoIdentityId(req)
-    console.log(`cognito id: ${cognitoIdentityId}`)
+    const cognitoUsername = getCognitoUsername(req)
+    console.log(`cognito username: ${cognitoUsername}`)
 
     function error(data) {
         console.log(`error: ${data}`)
@@ -224,7 +224,7 @@ function putMarketplaceSubscription(req, res) {
     }
 
     function subscribeCustomerToUsagePlan(data) {
-        customersController.subscribe(cognitoIdentityId, usagePlanId, error, success)
+        customersController.subscribe(cognitoUsername, usagePlanId, error, success)
     }
 
     const marketplace = new AWS.MarketplaceMetering()
@@ -244,7 +244,7 @@ function putMarketplaceSubscription(req, res) {
             // persist the marketplaceCustomerId in DDB
             // this is used when the subscription listener receives the subscribe notification
             const marketplaceCustomerId = data.CustomerIdentifier
-            customersController.updateCustomerMarketplaceId(cognitoIdentityId, marketplaceCustomerId, error, subscribeCustomerToUsagePlan)
+            customersController.updateCustomerMarketplaceId(cognitoUsername, marketplaceCustomerId, error, subscribeCustomerToUsagePlan)
         }
     })
 }

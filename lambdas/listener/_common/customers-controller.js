@@ -46,7 +46,7 @@ function ensureCustomerItem(cognitoIdentityId, keyId, error, callback) {
     })
 }
 
-function getCognitoIdentityId(marketplaceCustomerId, error, callback) {
+function getCognitoUsername(marketplaceCustomerId, error, callback) {
     const params = {
         TableName: customersTable,
         IndexName: "MarketplaceCustomerIdIndex",
@@ -342,5 +342,5 @@ module.exports = {
     getUsagePlansForCustomer: getUsagePlansForCustomer,
     getUsagePlanForProductCode: getUsagePlanForProductCode,
     updateCustomerMarketplaceId: updateCustomerMarketplaceId,
-    getCognitoIdentityId: getCognitoIdentityId
+    getCognitoUsername: getCognitoUsername
 }
