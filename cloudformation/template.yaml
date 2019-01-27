@@ -938,7 +938,7 @@ Resources:
       LogoutURL: !Join ['', [ 'https://', !If [ UseCustomDomainName, !Ref CustomDomainName, !GetAtt DefaultCloudfrontDistribution.DomainName ]]]
       AllowedOAuthFlowsUserPoolClient: true
       AllowedOAuthFlows: [ "implicit" ]
-      AllowedOAuthScopes: [ "openid" ]
+      AllowedOAuthScopes: [ "openid", !Join ['', [!Ref 'AWS::StackName', '-resource-server/user-access']]  ]
 
   CognitoUserPoolDomainBackingFnRole:
     Type: 'AWS::IAM::Role'
