@@ -1,28 +1,31 @@
 const AWS = require('aws-sdk');
 const notifyCFN = require('./notify-cfn')
 
+
 exports.handler = async (event, context) => {
   try {
     let cognitoIdentityServiceProvider = new AWS.CognitoIdentityServiceProvider(),
-        responseData,
-        physicalResourceId
+      responseData,
+      physicalResourceId,
+      scopes = [{
+        ScopeDescription: 'Normal user access',
+        ScopeName: 'user.access'
+      }]
 
     switch (event.RequestType) {
       case 'Create':
+        if(event.ResourceProperties.Admin) {
+          scopes.push({
+            ScopeDescription: 'Admin access',
+            ScopeName: 'admin.access'
+          })
+        }
+
         responseData = await cognitoIdentityServiceProvider.createResourceServer({
           Identifier: event.ResourceProperties.Identifier,
           UserPoolId: event.ResourceProperties.UserPoolId,
-          Name: 'string',
-          Scopes: [
-            {
-              ScopeDescription: 'Normal user access',
-              ScopeName: 'user-access'
-            },
-            {
-              ScopeDescription: 'Admin access',
-              ScopeName: 'admin-access'
-            }
-          ]
+          Name: event.ResourceProperties.Identifier,
+          Scopes: scopes
         }).promise()
 
         if (responseData && responseData.UserPoolId && responseData.Identifier) {
@@ -38,9 +41,11 @@ exports.handler = async (event, context) => {
         break;
 
       case 'Delete':
-          responseData = await cognitoIdentityServiceProvider.deleteResourceServer({
+        console.log('This here is a delete!')
+        console.log('cognitoIdentityServiceProvider.deleteResourceServer:' + cognitoIdentityServiceProvider.deleteResourceServer)
+        responseData = await cognitoIdentityServiceProvider.deleteResourceServer({
           Identifier: event.ResourceProperties.Identifier,
-          UserPoolId: event.ResourceProperties.UserPoolId,
+          UserPoolId: event.ResourceProperties.UserPoolId
         });
 
         break;

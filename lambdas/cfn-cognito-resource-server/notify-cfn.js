@@ -1,4 +1,5 @@
 const crypto = require('crypto')
+const inspect = require('util').inspect
 
 let lastRequestId = ''
 
@@ -32,7 +33,7 @@ function notifyCFN ({ event, context, responseStatus, responseData, error, physi
   
   // lastRequestId = event.RequestId
 
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     let errorMessage = error ? error.message || error.error || error.errorMessage || error : ''
 
     // if there's no response message, default it based on presence of an error
@@ -40,10 +41,32 @@ function notifyCFN ({ event, context, responseStatus, responseData, error, physi
       responseStatus = error ? 'FAILED' : 'SUCCESS' 
 
     // if there's no physicalResourceId and it's a SUCCESS, fake a physicalResourceId from the responseData
-    if (!physicalResourceId)
-      physicalResourceId = crypto.createHash('md5').update(JSON.stringify(responseData) || '{}').digest('hex')
+    if (!physicalResourceId) {
+      console.log('Zeroth, ')
+        console.log(`inspect(responseData): ${inspect(responseData)}`)
+        // console.log(`JSON.stringify(responseData): ${JSON.stringify(responseData)}`)
+        physicalResourceId = crypto.createHash('md5').update(inspect(responseData) || '{}').digest('hex')
+    }
+
 
     if (!logicalResourceId) logicalResourceId = event.LogicalResourceId
+
+    console.log('Let\'s get circular!')
+
+    console.log('First, ')
+    console.log(`status: ${JSON.stringify(responseStatus)}`)
+    console.log('Second, ')
+    console.log(`reason: ${JSON.stringify((errorMessage || '') + "\n For more details, see CloudWatch group (" + context.logGroupName + ') and stream (' + context.logStreamName + ')')}`)
+    console.log('Third, ')
+    console.log(`physical resource id: ${JSON.stringify(physicalResourceId)}`)
+    console.log('Fourth, ')
+    console.log(`stack id: ${JSON.stringify(event.StackId)}`)
+    console.log('Fifth, ')
+    console.log(`request id: ${JSON.stringify(event.RequestId)}`)
+    console.log('Sixth, ')
+    console.log(`logical resource id: ${JSON.stringify(logicalResourceId)}`)
+    // console.log('Seventh, ')
+    // console.log(`data: ${JSON.stringify(responseData)}`)
 
     var responseBody = JSON.stringify({
       Status: responseStatus,
@@ -52,7 +75,7 @@ function notifyCFN ({ event, context, responseStatus, responseData, error, physi
       StackId: event.StackId,
       RequestId: event.RequestId,
       LogicalResourceId: logicalResourceId, // the lambda function; do we want this?
-      Data: responseData
+      Data: { "message": "Wow, such success!" }
     });
 
     console.log("Response body:\n", responseBody);

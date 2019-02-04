@@ -3,11 +3,11 @@ const crypto = require('crypto')
 let lastRequestId = ''
 
 /**
- * 
+ *
  * The config object used to define the response sent to CloudFormation.
- * 
+ *
  * @typedef {Object} ResponseConfig
- * 
+ *
  * @property {Object} event - The event object passed in from the lambda function.
  * @property {Object} context - The context object passed in from the lambda function. Required if logStream is not present.
  * @property {string} responseStatus - Indicates if the response was a SUCCESS or FAILURE.
@@ -21,7 +21,7 @@ let lastRequestId = ''
  * Uses the cfn-response library to notify CloudFormation that this custom resource is done with the task it was
  * invoked to do. This could be the response to a create / update request (which would upload files from S3) or a
  * delete request (which would delete files from S3).
- * 
+ *
  * Returns a Promise b/c it's being used inside an async function.
  *
  * @param {ResponseConfig} config - context lambda function context
@@ -29,15 +29,15 @@ let lastRequestId = ''
 function notifyCFN ({ event, context, responseStatus, responseData, error, physicalResourceId, logicalResourceId }) {
   // if (lastRequestId === event.RequestId)
     // return Promise.reject("Attempted to run `notifyCFN` more than once with the same responseURL. I'm afraid I can't let you do that, Dave.")
-  
+
   // lastRequestId = event.RequestId
 
-  return new Promise(resolve => {
+  return new Promise((resolve, reject) => {
     let errorMessage = error ? error.message || error.error || error.errorMessage || error : ''
 
     // if there's no response message, default it based on presence of an error
     if (!responseStatus)
-      responseStatus = error ? 'FAILED' : 'SUCCESS' 
+      responseStatus = error ? 'FAILED' : 'SUCCESS'
 
     // if there's no physicalResourceId and it's a SUCCESS, fake a physicalResourceId from the responseData
     if (!physicalResourceId)
@@ -90,14 +90,14 @@ function notifyCFN ({ event, context, responseStatus, responseData, error, physi
 
 /**
  * Inform CloudFormation this request was a success.
- * 
+ *
  * @param {ResponseConfig} config - The config object used to define the response sent to CloudFormation.
  */
 function ofSuccess(config) { return notifyCFN({ ...config, responseStatus: 'SUCCESS'}) }
 
 /**
  * Inform CloudFormation this request was a failure.
- * 
+ *
  * @param {ResponseConfig} config - The config object used to define the response sent to CloudFormation.
  */
 function ofFailure(config) { return notifyCFN({ ...config, responseStatus: 'FAILED'}) }

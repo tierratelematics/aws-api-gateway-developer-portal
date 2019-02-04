@@ -188,7 +188,10 @@ function addConfigFile(bucketName, event) {
             identityPoolId: event.ResourceProperties.IdentityPoolId,
             userPoolId: event.ResourceProperties.UserPoolId,
             userPoolClientId: event.ResourceProperties.UserPoolClientId,
-            userPoolDomain: event.ResourceProperties.UserPoolDomain
+            userPoolDomain: event.ResourceProperties.UserPoolDomain,
+            adminUserPoolId: event.ResourceProperties.AdminUserPoolId,
+            adminUserPoolClientId: event.ResourceProperties.AdminUserPoolClientId,
+            adminUserPoolDomain: event.ResourceProperties.AdminUserPoolDomain
         },
         params = {
             Bucket: bucketName,
@@ -290,7 +293,12 @@ function handler(event, context) {
 
         if (event.RequestType === "Delete") {
             console.log(`bucketName: ${bucketName}, staticBucketName: ${staticBucketName}`)
-            return exports.cleanS3Bucket(bucketName)
+            // I know that this is a promise, but please don't return it
+            // If you return it, lambda will kill the node runtime, even if there's
+            // work to do in the event loop still. notifyCFN...() uses a callback pattern
+            // and isn't represented well by the promise this returns. It can be fixed
+            // in the future by moving to nhutch@'s promise-wrapped notifyCFN...()
+            exports.cleanS3Bucket(bucketName)
                 .then(() => exports.cleanS3Bucket(staticBucketName))
                 .then(() => {
                     exports.notifyCFNThatUploadSucceeded({status: 'delete_success', bucket: bucketName}, event, context)
