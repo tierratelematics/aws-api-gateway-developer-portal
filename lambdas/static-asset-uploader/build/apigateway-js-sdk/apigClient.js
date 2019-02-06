@@ -83,7 +83,6 @@ apigClientFactory.newClient = function (config) {
 
     // We'll store this for use later
     apiGatewayClient.jwtToken = config.jwtToken;
-    console.warn(config.jwtToken);
 
     apigClient.rootOptions = function (params, body, additionalParams) {
         if(additionalParams === undefined) { additionalParams = {}; }
@@ -123,8 +122,6 @@ apigClientFactory.newClient = function (config) {
             proxyOptionsRequest.headers.Authorization = apiGatewayClient.jwtToken;
         }
 
-        console.log(proxyOptionsRequest);
-
         return apiGatewayClient.makeRequest(proxyOptionsRequest, authType, additionalParams, config.apiKey);
     };
 
@@ -144,7 +141,6 @@ apigClientFactory.newClient = function (config) {
         if (apiGatewayClient.jwtToken) {
             proxyOptionsRequest.headers.Authorization = apiGatewayClient.jwtToken;
         }
-
 
         return apiGatewayClient.makeRequest(proxyOptionsRequest, authType, additionalParams, config.apiKey);
     };
@@ -166,7 +162,6 @@ apigClientFactory.newClient = function (config) {
             proxyOptionsRequest.headers.Authorization = apiGatewayClient.jwtToken;
         }
 
-
         return apiGatewayClient.makeRequest(proxyOptionsRequest, authType, additionalParams, config.apiKey);
     };
 
@@ -186,7 +181,6 @@ apigClientFactory.newClient = function (config) {
         if (apiGatewayClient.jwtToken) {
             proxyOptionsRequest.headers.Authorization = apiGatewayClient.jwtToken;
         }
-
 
         return apiGatewayClient.makeRequest(proxyOptionsRequest, authType, additionalParams, config.apiKey);
     };

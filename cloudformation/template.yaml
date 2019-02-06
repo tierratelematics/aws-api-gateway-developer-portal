@@ -47,12 +47,12 @@ Parameters:
   DevPortalCustomersTableName:
     Type: String
     Description: The name of the DynamoDB Customers table.
-    Default: "DevPortalCustomers"
+    Default: 'DevPortalCustomers'
 
   StaticAssetRebuildToken:
     Type: String
     Description: Provide a token different from the last deployment's token to re-upload the dev portal site's static assets. You can provide a timestamp or GUID on each deployment to always re-upload the assets.
-    Default: defaultRebuildToken
+    Default: 'defaultRebuildToken'
 
   StaticAssetRebuildMode:
     Type: String
@@ -62,7 +62,7 @@ Parameters:
   MarketplaceSubscriptionTopicProductCode:
     Type: String
     Description: The marketplace SNS topic suffix for subscription/unsubscription events
-    Default: "DevPortalMarketplaceSubscriptionTopic"
+    Default: 'DevPortalMarketplaceSubscriptionTopic'
 
 #  CognitoIdentityPoolName:
 #    Type: String
@@ -72,7 +72,7 @@ Parameters:
   CognitoUserPoolName:
     Type: String
     Description: The name for your Cognito User Pool.
-    Default: "DevPortalUserPool"
+    Default: 'DevPortalUserPool'
 
   CognitoDomainNameOrPrefix:
     Type: String
@@ -981,6 +981,8 @@ Resources:
     Type: AWS::Cognito::UserPool
     Properties:
       UserPoolName: !Join ['', [!Ref CognitoUserPoolName, 'Admins']]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
 #      LambdaConfig:
 #        PreSignUp: !GetAtt CognitoUserPoolsConfirmationStrategyFunction.Arn
       Policies:
@@ -1117,7 +1119,65 @@ Resources:
       Identifier: !Join ['', [!Ref 'AWS::StackName', '-admin-resource-server']]
       Admin: true
 
-  #######
+#  CognitoAdminUserPoolDomainBackingFnRole:
+#    Type: 'AWS::IAM::Role'
+#    Properties:
+#      AssumeRolePolicyDocument:
+#        Version: '2012-10-17'
+#        Statement:
+#          -
+#            Effect: Allow
+#            Action: 'sts:AssumeRole'
+#            Principal:
+#              Service: lambda.amazonaws.com
+#      Policies:
+#        - PolicyName: WriteCloudWatchLogs
+#          PolicyDocument:
+#            Version: '2012-10-17'
+#            Statement:
+#              -
+#                Effect: Allow
+#                Action:
+#                  - 'logs:CreateLogGroup'
+#                  - 'logs:CreateLogStream'
+#                  - 'logs:PutLogEvents'
+#                Resource: 'arn:aws:logs:*:*:*'
+#        - PolicyName: ManageUserPoolDomain
+#          PolicyDocument:
+#            Version: '2012-10-17'
+#            Statement:
+#              -
+#                Effect: Allow
+#                Action: 'cognito-idp:CreateUserPoolDomain'
+#                Resource: 'arn:aws:cognito-idp:*:*:userpool/*'
+#              -
+#                Effect: Allow
+#                Action: 'cognito-idp:DeleteUserPoolDomain'
+#                Resource: 'arn:aws:cognito-idp:*:*:userpool/*'
+#              -
+#                Effect: Allow
+#                Action: 'cognito-idp:DescribeUserPoolDomain'
+#                Resource: '*'
+#
+#  CognitoAdminUserPoolDomainBackingFn:
+#    Type: AWS::Serverless::Function
+#    Properties:
+#      Runtime: nodejs8.10
+#      MemorySize: 128
+#      Timeout: 300
+#      CodeUri: ../lambdas/cfn-cognito-user-pools-domain
+#      Handler: index.handler
+#      Role: !GetAtt CognitoAdminUserPoolDomainBackingFnRole.Arn
+
+  CognitoAdminUserPoolDomain:
+    Type: AWS::CloudFormation::CustomResource
+    Condition: UseCognitoHostedUI
+    Properties:
+      Timeout: 360
+      # note: we're re-using the non-admin user pool's backing lambda
+      ServiceToken: !GetAtt CognitoUserPoolDomainBackingFn.Arn
+      UserPoolId: !Ref CognitoAdminUserPool
+      Domain: !Join ['', [!Ref CognitoDomainNameOrPrefix, '-admin']]
 
   CognitoResourceServerBackingFnRole:
     Type: 'AWS::IAM::Role'
