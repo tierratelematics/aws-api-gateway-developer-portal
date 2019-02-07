@@ -19,30 +19,6 @@ import Register from './Register'
 
 export const NavBar = observer(
   class NavBar extends React.Component {
-    handleOpen = (childsName) => {
-      if (childsName === 'register') {
-        this.setState({ register: { isOpen: true } })
-        this.setState({ signIn: { isOpen: false } })
-      } else if (childsName === 'signIn') {
-        this.setState({ signIn: { isOpen: true } })
-        this.setState({ register: { isOpen: false } })
-      }
-    }
-
-    handleClose = () => {
-      this.setState({ signIn: { isOpen: false } })
-      this.setState({ register: { isOpen: false } })
-    }
-
-    state = {
-      register: {
-        isOpen: false
-      },
-      signIn: {
-        isOpen: false
-      }
-    }
-
     insertAuthMenu(authenticated) {
       if (authenticated) {
         return (
@@ -56,18 +32,8 @@ export const NavBar = observer(
             <Menu.Menu position="right">
               <SignIn
                   key="signin"
-                  handleOpen={ this.handleOpen }
-                  handleClose={ this.handleClose }
-                  isOpen={ this.state.signIn.isOpen }
-                  signedIn={ false }
                   trigger={<Menu.Item as="a">Sign In</Menu.Item>} />
-              <Register
-                  key="register"
-                  handleOpen={ this.handleOpen }
-                  handleClose={ this.handleClose }
-                  isOpen={ this.state.register.isOpen }
-                  signedIn={ false }
-                  trigger={<Menu.Item as="a">Register</Menu.Item>} />
+              <Register/>
             </Menu.Menu>
           )
       }

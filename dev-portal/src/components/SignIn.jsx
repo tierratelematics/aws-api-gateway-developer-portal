@@ -37,9 +37,6 @@ export default class SignIn extends React.Component {
         }
         on='click'
         position='bottom right'
-        open={ this.props.isOpen }
-        onOpen={ () => this.props.handleOpen('signIn') }
-        onClose={ () => this.props.handleClose() }
       />)
   }
 }
