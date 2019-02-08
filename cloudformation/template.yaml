@@ -890,7 +890,6 @@ Resources:
 
   CognitoUserPoolClientSettings:
     Type: AWS::CloudFormation::CustomResource
-    Condition: UseCognitoHostedUI
     Properties:
       Timeout: 360
       ServiceToken: !GetAtt CognitoUserPoolClientSettingsBackingFn.Arn
@@ -956,7 +955,6 @@ Resources:
 
   CognitoUserPoolDomain:
     Type: AWS::CloudFormation::CustomResource
-    Condition: UseCognitoHostedUI
     Properties:
       Timeout: 360
       ServiceToken: !GetAtt CognitoUserPoolDomainBackingFn.Arn
@@ -1209,7 +1207,10 @@ Resources:
       Region: !Ref 'AWS::Region'
       UserPoolId: !Ref CognitoUserPool
       UserPoolClientId: !Ref CognitoUserPoolClient
-      UserPoolDomain: !If [ UseCognitoHostedUI, !GetAtt CognitoUserPoolDomain.FullUrl, '' ]
+      UserPoolDomain: !GetAtt CognitoUserPoolDomain.FullUrl
+      AdminUserPoolId: !Ref CognitoAdminUserPool
+      AdminUserPoolClientId: !Ref CognitoAdminUserPoolClient
+      AdminUserPoolDomain: !GetAtt CognitoAdminUserPoolDomain.FullUrl
       MarketplaceSuffix: !Ref MarketplaceSubscriptionTopicProductCode
       RebuildToken: !Ref StaticAssetRebuildToken
       RebuildMode: !Ref StaticAssetRebuildMode
