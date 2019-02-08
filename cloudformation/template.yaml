@@ -159,6 +159,10 @@ Resources:
         paths:
           /:
             x-amazon-apigateway-any-method:
+              security:
+              - user-authorizer:
+                - !Join ['', [!Ref 'AWS::StackName', '-resource-server/user.access']]
+                - !Join ['', [!Ref 'AWS::StackName', '-admin-resource-server/user.access']]
               produces:
               - application/json
               responses:
@@ -208,6 +212,10 @@ Resources:
                 type: mock
           /register:
             post:
+              security:
+              - user-authorizer:
+                - !Join ['', [!Ref 'AWS::StackName', '-resource-server/user.access']]
+                - !Join ['', [!Ref 'AWS::StackName', '-admin-resource-server/user.access']]
               produces:
               - application/json
               responses: {}
@@ -290,6 +298,10 @@ Resources:
                 type: mock
           /catalog:
             get:
+              security:
+              - user-authorizer:
+                - !Join ['', [!Ref 'AWS::StackName', '-resource-server/user.access']]
+                - !Join ['', [!Ref 'AWS::StackName', '-admin-resource-server/user.access']]
               produces:
               - application/json
               responses: {}
@@ -331,8 +343,10 @@ Resources:
                 type: mock
           /{proxy+}:
             x-amazon-apigateway-any-method:
-              x-amazon-apigateway-auth:
-                type: aws_iam
+              security:
+              - user-authorizer:
+                - !Join ['', [!Ref 'AWS::StackName', '-resource-server/user.access']]
+                - !Join ['', [!Ref 'AWS::StackName', '-admin-resource-server/user.access']]
               produces:
               - application/json
               parameters:
@@ -381,6 +395,17 @@ Resources:
           Empty:
             type: object
             title: Empty Schema
+        securityDefinitions:
+          user-authorizer:
+            type: "apiKey"
+            name: "Authorization"
+            in: "header"
+            x-amazon-apigateway-authtype: "cognito_user_pools"
+            x-amazon-apigateway-authorizer:
+              providerARNs:
+              - !GetAtt CognitoUserPool.Arn
+              - !GetAtt CognitoAdminUserPool.Arn
+              type: "cognito_user_pools"
 
       StageName: prod
       Variables:
