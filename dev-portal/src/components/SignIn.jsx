@@ -4,8 +4,6 @@
 import React from 'react'
 import { Button, Popup } from 'semantic-ui-react'
 import { Redirect } from 'react-router-dom'
-import { login } from 'services/self'
-import { confirmMarketplaceSubscription } from 'services/api-catalog'
 
 import { cognitoDomain, cognitoClientId, cognitoAdminDomain, cognitoAdminClientId } from '../services/api'
 

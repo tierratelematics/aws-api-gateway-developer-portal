@@ -4,10 +4,8 @@
 import React from 'react'
 import { Menu } from 'semantic-ui-react'
 import { Redirect } from 'react-router-dom'
-import { register } from 'services/self'
-import { confirmMarketplaceSubscription } from 'services/api-catalog'
 
-import { cognitoDomain, cognitoClientId, cognitoAdminDomain, cognitoAdminClientId } from '../services/api'
+import { cognitoDomain, cognitoClientId } from '../services/api'
 
 export default class Register extends React.Component {
   redirectUri = `${window.location.protocol}//${window.location.host}/login`

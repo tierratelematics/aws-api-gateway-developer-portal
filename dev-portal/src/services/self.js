@@ -6,7 +6,7 @@ import { CognitoUserPool, CognitoUser, AuthenticationDetails } from 'amazon-cogn
 // services
 import { store } from 'services/state'
 import { updateAllUserData } from 'services/api-catalog'
-import { initApiGatewayClient, apiGatewayClient, cognitoDomain, cognitoUserPoolId, cognitoClientId, cognitoRegion } from 'services/api'
+import { initApiGatewayClient, apiGatewayClient, cognitoDomain, cognitoUserPoolId, cognitoClientId } from 'services/api'
 
 const poolData = {
   UserPoolId: cognitoUserPoolId,
@@ -17,10 +17,6 @@ let userPool
 
 export function isAuthenticated() {
   return store.cognitoUser
-}
-
-function getCognitoLoginKey() {
-  return `cognito-idp.${cognitoRegion}.amazonaws.com/${cognitoUserPoolId}`
 }
 
 export function init() {
