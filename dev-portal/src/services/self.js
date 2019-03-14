@@ -8,6 +8,9 @@ import { store } from 'services/state'
 import { updateAllUserData } from 'services/api-catalog'
 import { initApiGatewayClient, apiGatewayClient, cognitoDomain, cognitoUserPoolId, cognitoClientId } from 'services/api'
 
+import * as jwt_decode from "jwt-decode";
+
+
 const poolData = {
   UserPoolId: cognitoUserPoolId,
   ClientId: cognitoClientId
@@ -19,13 +22,19 @@ export function isAuthenticated() {
   return store.cognitoUser
 }
 
+export function isAdmin() {
+  return store.cognitoUser &&
+  `${jwt_decode(store.cognitoUser.signInUserSession.accessToken.jwtToken).scope}`
+    .includes('admin-resource-server/admin.access')
+}
+
 export function init() {
   // attempt to refresh credentials from active session
   userPool = new CognitoUserPool(poolData)
   store.cognitoUser = userPool.getCurrentUser()
 
   if (store.cognitoUser !== null) {
-    store.cognitoUser.getSession(function(err, session) {
+    store.cognitoUser.getSession(function (err, session) {
       if (err) {
         logout()
         console.error(err)
@@ -37,7 +46,7 @@ export function init() {
   } else {
     let signInUserSession = localStorage.getItem(JSON.stringify(poolData))
     if (signInUserSession) {
-      
+
       store.cognitoUser = new CognitoUser({
         Username: '', // blank user name if we aren't using username and password
         Pool: userPool
@@ -95,7 +104,7 @@ export function login(email, password) {
     localCognitoUser.signInUserSession = {}
 
     window.location.hash
-      .replace(/^#/,'')
+      .replace(/^#/, '')
       .split('&')
       .map(param => param.split('='))
       .forEach(param => {
@@ -108,7 +117,7 @@ export function login(email, password) {
 
         // will use this value to auto-log out... eventually
         // if (param[0] === 'expires_in')
-          // console.log(param[1])
+        // console.log(param[1])
       })
 
     if (localCognitoUser.signInUserSession.idToken) {
@@ -122,11 +131,11 @@ export function login(email, password) {
 }
 
 function setCredentials(cognitoUser) {
-    initApiGatewayClient(cognitoUser.signInUserSession.accessToken.jwtToken)
-    updateAllUserData()
+  initApiGatewayClient(cognitoUser.signInUserSession.accessToken.jwtToken)
+  updateAllUserData()
 
-    return apiGatewayClient()
-      .then(apiGatewayClient => apiGatewayClient.post('/signin', {}, {}, {}))
+  return apiGatewayClient()
+    .then(apiGatewayClient => apiGatewayClient.post('/signin', {}, {}, {}))
 }
 
 export function logout() {

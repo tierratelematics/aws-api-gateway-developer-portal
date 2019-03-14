@@ -33,7 +33,7 @@ app.post('/feedback', handlers.postFeedback)
 // admin APIs
 app.get('/admin/catalog/visibility', handlers.getAdminCatalogVisibility)
 app.post('/admin/catalog/visibility', handlers.postAdminCatalogVisibility)
-app.delete('/admin/catalog/visibility', handlers.deleteAdminCatalogVisibility)
+app.delete('/admin/catalog/visibility/:id', handlers.deleteAdminCatalogVisibility)
 
 // The aws-serverless-express library creates a server and listens on a Unix
 // Domain Socket for you, so you can remove the usual call to app.listen.
