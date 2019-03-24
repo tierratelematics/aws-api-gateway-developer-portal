@@ -284,7 +284,7 @@ export class ApiManagement extends Component {
     // some APIs are visible, some are hidden; show the current state (Partial, with a warning) and enable on click
     else {
       return (
-      <Popup content='Users subscribed to any of the APIs in this usage plan will have a valid API key for all APIs in this usage plan, even those that are not visible!' trigger={<Button basic
+      <Popup content={`Users will not be able to subscribe to APIs in this usage plan until every API in the usage plan is visible. Please make the remaining APIs visible or remove them from the ${usagePlan.name} usage plan.`} trigger={<Button basic
                               color='yellow'
                               style={{ backgroundColor: 'white', width: '100%', paddingLeft: '1em', paddingRight: '1em', minWidth: '88px' }}
                               onClick={() => this.showAllApiGatewayApis(usagePlan)}>
