@@ -1107,6 +1107,9 @@ Resources:
       UserPoolId: !Ref CognitoUserPool
       UserPoolClientId: !Ref CognitoUserPoolClient
       SupportedIdentityProviders: [ "COGNITO" ] # should (eventually) allow people to add values
+      # this is not used by the backing lambda function, but is required for the custom resource
+      # to run on changes to the DevelopmentMode flag
+      DevelopmentMode: !Ref DevelopmentMode
       CallbackURL: !If [ DevelopmentMode,
         [
           'http://localhost:3000/login',
