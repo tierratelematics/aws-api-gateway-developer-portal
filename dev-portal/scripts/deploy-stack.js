@@ -11,6 +11,7 @@ const stackName = deployerConfig.stackName
 const buildAssetsBucket = deployerConfig.buildAssetsBucket
 const siteAssetsBucket = deployerConfig.siteAssetsBucket
 const apiAssetsBucket = deployerConfig.apiAssetsBucket
+const region = deployerConfig.region
 
 // required (and defaulted) inputs
 const samTemplate = deployerConfig.samTemplate || r(`../../cloudformation/template.yaml`)
@@ -28,7 +29,7 @@ const profileOption = awsSamCliProfile ? `--profile ${awsSamCliProfile}` : ''
 function main() {
   Promise.resolve()
       .then(() => execute(`sam package --template-file ${samTemplate} --output-template-file ${packageConfig} --s3-bucket ${buildAssetsBucket} ${profileOption}`, true))
-.then(() => execute(`sam deploy --template-file ${packageConfig} --stack-name ${stackName} --capabilities CAPABILITY_NAMED_IAM --parameter-overrides StaticAssetRebuildToken="${Date.now()}" StaticAssetRebuildMode="${staticAssetRebuildMode}" DevPortalSiteS3BucketName="${siteAssetsBucket}" ArtifactsS3BucketName="${apiAssetsBucket}" DevPortalCustomersTableName="${customersTableName}" CognitoDomainNameOrPrefix="${cognitoDomainName}" --s3-bucket ${buildAssetsBucket} ${profileOption}`, true))
+.then(() => execute(`sam deploy --template-file ${packageConfig} --region ${region} --stack-name ${stackName} --capabilities CAPABILITY_NAMED_IAM --parameter-overrides StaticAssetRebuildToken="${Date.now()}" StaticAssetRebuildMode="${staticAssetRebuildMode}" DevPortalSiteS3BucketName="${siteAssetsBucket}" ArtifactsS3BucketName="${apiAssetsBucket}" DevPortalCustomersTableName="${customersTableName}" CognitoDomainNameOrPrefix="${cognitoDomainName}" --s3-bucket ${buildAssetsBucket} ${profileOption}`, true))
 .then(() => writeConfig(true))
 .then(() => console.log('\n' + 'Process Complete! Run `npm run start` to launch run the dev portal locally.\n'.green()))
 .catch(err => {

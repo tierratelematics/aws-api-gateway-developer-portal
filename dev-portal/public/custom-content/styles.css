@@ -3,3 +3,7 @@
 Add your custom styling here. Note that styling in the source is loaded AFTER this sheet, and has higher priority. Make sure your styles here don't collide with source styles.
 
 */
+
+.ui.inverted.menu {
+    background: #1F506E !important;
+}

@@ -299,8 +299,6 @@ Resources:
                 type: mock
           /catalog:
             get:
-              security:
-              - sigv4: []
               produces:
               - application/json
               responses: {}

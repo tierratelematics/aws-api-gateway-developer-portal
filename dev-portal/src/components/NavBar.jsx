@@ -35,11 +35,6 @@ export const NavBar = observer(
           </Menu.Menu>
         ) : (
           <Menu.Menu position="right">
-            <Menu.Item key="register" as="a"
-                       href={this.getCognitoUrl('login')}>
-                Sign In
-            </Menu.Item>
-            <Register />
           </Menu.Menu>
         )
     }
@@ -47,13 +42,8 @@ export const NavBar = observer(
     render() {
       return <Menu inverted borderless attached style={{ flex: "0 0 auto" }} >
         <Menu.Item as={Link} to="/">
-          <Image size='mini' src="/custom-content/nav-logo.png" style={{ paddingRight: "10px" }} />
-          {fragments.Home.title}
+          <Image size='small' src="/custom-content/nav-logo.svg" style={{ paddingRight: "10px" }} />
         </Menu.Item>
-
-        <Menu.Item as={Link} to="/getting-started">{fragments.GettingStarted.title}</Menu.Item>
-        <Menu.Item as={Link} to="/apis">{fragments.APIs.title}</Menu.Item>
-
         {this.insertAuthMenu()}
       </Menu >
     }

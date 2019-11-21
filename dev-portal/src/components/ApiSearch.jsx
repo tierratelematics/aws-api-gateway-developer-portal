@@ -51,18 +51,18 @@ export default observer(class ApiSearch extends Component {
   createSearchCategories = (apiGateway, generic) => {
 
     let categories = {
-      "Subscribable": {
-        "name": "Subscribable",
+      "Public": {
+        "name": "Public",
         "results": []
       },
-      "Not Subscribable": {
-        "name": "Not Subscribable",
+      "Private": {
+        "name": "Private",
         "results": []
       }
     }
 
     apiGateway.forEach(({ id, stage, swagger, subscribed, usagePlan }) => {
-      categories.Subscribable.results.push({
+      categories.Public.results.push({
         url: `/apis/${id}/${stage}`,
         title: `${swagger.info.title} - ${stage}`,
         stage: `${stage}`,
@@ -77,7 +77,7 @@ export default observer(class ApiSearch extends Component {
         searchable: `${JSON.stringify(swagger)}${stage || ''}`
       }
       if (stage) api.stage = stage
-      categories["Not Subscribable"].results.push(api)
+      categories["Private"].results.push(api)
     })
 
     this.setState((prev) => ({ ...prev, categories }), () => { console.log(this.state.categories) })

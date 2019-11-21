@@ -63,7 +63,7 @@ class App extends React.Component {
           <NavBar />
           <GlobalModal />
           <Switch>
-            <Route exact path="/" component={Home} />
+            <Route exact path="/" component={Apis} />
             <Route exact path="/index.html" component={() => {
               const { action } = queryString.parse(window.location.search)
               if (action === 'login') {
