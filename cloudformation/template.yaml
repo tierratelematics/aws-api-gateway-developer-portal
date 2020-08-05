@@ -20,11 +20,13 @@ Metadata:
         Parameters:
           - CognitoIdentityPoolName
           - DevPortalCustomersTableName
-      -
-        Label:
-          default: "Subscription Notification Configuration"
-        Parameters:
-          - MarketplaceSubscriptionTopicProductCode
+          - AccountRegistrationMode
+      # Marketplace support is currently broken
+      # -
+      #   Label:
+      #     default: "Subscription Notification Configuration"
+      #   Parameters:
+      #     - MarketplaceSubscriptionTopicProductCode
       -
         Label:
           default: "Custom Domain Configuration"
@@ -32,6 +34,8 @@ Metadata:
           - CustomDomainName
           - CustomDomainNameAcmCertArn
           - UseRoute53Nameservers
+          - CognitoDomainNameOrPrefix
+          # - CognitoDomainAcmCertArn
       -
         Label:
           default: "Dev Portal Customer Feedback Configuration"
@@ -55,6 +59,11 @@ Parameters:
     Description: The name of the DynamoDB Customers table.
     Default: 'DevPortalCustomers'
 
+  DevPortalPreLoginAccountsTableName:
+    Type: String
+    Description: The name of the DynamoDB PreLoginAccounts table.
+    Default: 'DevPortalPreLoginAccounts'
+
   DevPortalAdminEmail:
     Type: String
     Description: The email address where user submitted feedback notifications get sent.
@@ -70,6 +79,11 @@ Parameters:
     Description: Provide a token different from the last deployment's token to re-upload the dev portal site's static assets. You can provide a timestamp or GUID on each deployment to always re-upload the assets.
     Default: 'defaultRebuildToken'
 
+  EdgeLambdaRebuildToken:
+    Type: String
+    Description: Provide a token different from the last deployment's token to update the edge lambda. You can provide a timestamp or GUID on each deployment to always update it.
+    Default: 'defaultRebuildToken'
+
   StaticAssetRebuildMode:
     Type: String
     Description: By default, a static asset rebuild doesn't overwrite custom-content. Provide the value `overwrite-content` to replace the custom-content with your local version. Don't do this unless you know what you're doing -- all custom changes in your s3 bucket will be lost. 
@@ -79,10 +93,11 @@ Parameters:
       - ''
     ConstraintDescription: Malformed input - Parameter StaticAssetRebuildMode value must be either 'overwrite-content' or left blank.
 
-  MarketplaceSubscriptionTopicProductCode:
-    Type: String
-    Description: The marketplace SNS topic suffix for subscription/unsubscription events
-    Default: DevPortalMarketplaceSubscriptionTopic
+  # Marketplace support is currently broken
+  # MarketplaceSubscriptionTopicProductCode:
+  #   Type: String
+  #   Description: The marketplace SNS topic suffix for subscription/unsubscription events
+  #   Default: DevPortalMarketplaceSubscriptionTopic
 
   CognitoIdentityPoolName:
     Type: String
@@ -126,14 +141,35 @@ Parameters:
       - 'true'
     ConstraintDescription: Malformed input - Parameter DevelopmentMode value must be either 'true' or 'false'
 
+  LocalDevelopmentMode:
+    Type: String
+    Description: Enabling this disables CORS for easier local development. Do not enable this in production! Additionally, do not update a stack that was previously in development mode to be a production stack; instead, make a new stack that has never been in development mode.
+    Default: 'false'
+    AllowedValues: 
+      - 'false'
+      - 'true'
+    ConstraintDescription: Malformed input - Parameter LocalDevelopmentMode value must be either 'true' or 'false'
+  
+  AccountRegistrationMode:
+    Type: String
+    # Description: Methods allowed for account registration. In 'open' mode, any user may register for an account. In 'request' mode, any user may request an account, but an Admin must approve the request in order for the account to perform any privileged actions (like subscribing to an API). In 'invite' mode, users cannot register or request an account; instead, an Admin must send an invite for the user to accept.
+    Description: Methods allowed for account registration. In 'open' mode, any user may register for an account. In 'invite' mode, users cannot register or request an account; instead, an Admin must send an invite for the user to accept.
+    Default: 'open'
+    AllowedValues:
+      - 'open'
+      # - 'request'
+      - 'invite'
+
 Conditions:
   UseCustomDomainName: !And [!And [!Not [!Equals [!Ref CustomDomainName, '']], !Not [!Equals [!Ref CustomDomainNameAcmCertArn, '']]], !Condition NotDevelopmentMode]
   NoCustomDomainName: !And [!Not [ !Condition UseCustomDomainName ], !Condition NotDevelopmentMode]
   UseRoute53: !And [!Equals [!Ref UseRoute53Nameservers, 'true'], !Condition UseCustomDomainName]
   EnableFeedbackSubmission: !Not [!Equals [!Ref DevPortalAdminEmail, '']]
+  LocalDevelopmentMode: !Or [!Equals [!Ref DevelopmentMode, 'true'], !Equals [!Ref LocalDevelopmentMode, 'true']]
   DevelopmentMode: !Equals [!Ref DevelopmentMode, 'true']
   NotDevelopmentMode: !Not [!Condition DevelopmentMode]
   InUSEastOne: !Equals [!Ref 'AWS::Region', 'us-east-1']
+  InviteAccountRegistrationMode: !Equals [!Ref AccountRegistrationMode, 'invite']
 
 Resources:
   ApiGatewayApi:
@@ -148,6 +184,41 @@ Resources:
         schemes:
         - https
         paths:
+          # Version marker - please don't delete
+          /version/{v4_0_3}:
+            options:
+              consumes:
+              - application/json
+              produces:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  schema:
+                    $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Headers:
+                      type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: 200
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+                      method.response.header.Access-Control-Allow-Origin: !If [ 'LocalDevelopmentMode', "'*'", !If [
+                        'UseCustomDomainName',
+                        !Join ['', [ "'https://", !Ref CustomDomainName, "'" ]],
+                        !Join ['', [ "'https://", !GetAtt DefaultCloudfrontDistribution.DomainName, "'" ]]
+                      ]]
+                passthroughBehavior: when_no_match
+                requestTemplates:
+                  application/json: "{\"statusCode\": 200}"
+                type: mock
           /:
             x-amazon-apigateway-any-method:
               security:
@@ -194,7 +265,7 @@ Resources:
                     responseParameters:
                       method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
                       method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-                      method.response.header.Access-Control-Allow-Origin: !If [ 'DevelopmentMode', "'*'", !If [
+                      method.response.header.Access-Control-Allow-Origin: !If [ 'LocalDevelopmentMode', "'*'", !If [
                         'UseCustomDomainName',
                         !Join ['', [ "'https://", !Ref CustomDomainName, "'" ]],
                         !Join ['', [ "'https://", !GetAtt DefaultCloudfrontDistribution.DomainName, "'" ]]
@@ -241,7 +312,7 @@ Resources:
                     responseParameters:
                       method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
                       method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-                      method.response.header.Access-Control-Allow-Origin: !If [ 'DevelopmentMode', "'*'", !If [
+                      method.response.header.Access-Control-Allow-Origin: !If [ 'LocalDevelopmentMode', "'*'", !If [
                         'UseCustomDomainName',
                         !Join ['', [ "'https://", !Ref CustomDomainName, "'" ]],
                         !Join ['', [ "'https://", !GetAtt DefaultCloudfrontDistribution.DomainName, "'" ]]
@@ -250,53 +321,54 @@ Resources:
                 requestTemplates:
                   application/json: "{\"statusCode\": 200}"
                 type: mock
-          /marketplace-confirm/{usagePlanId}:
-            post:
-              security:
-              - sigv4: []
-              produces:
-              - application/json
-              responses: {}
-              x-amazon-apigateway-integration:
-                uri: !Join
-                  - ''
-                  - - !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function
-                    - :${stageVariables.DevPortalFunctionName}/invocations
-                httpMethod: POST
-                type: aws_proxy
-            options:
-              consumes:
-              - application/json
-              produces:
-              - application/json
-              responses:
-                '200':
-                  description: 200 response
-                  schema:
-                    $ref: "#/definitions/Empty"
-                  headers:
-                    Access-Control-Allow-Origin:
-                      type: string
-                    Access-Control-Allow-Methods:
-                      type: string
-                    Access-Control-Allow-Headers:
-                      type: string
-              x-amazon-apigateway-integration:
-                responses:
-                  default:
-                    statusCode: 200
-                    responseParameters:
-                      method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
-                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-                      method.response.header.Access-Control-Allow-Origin: !If [ 'DevelopmentMode', "'*'", !If [
-                        'UseCustomDomainName',
-                        !Join ['', [ "'https://", !Ref CustomDomainName, "'" ]],
-                        !Join ['', [ "'https://", !GetAtt DefaultCloudfrontDistribution.DomainName, "'" ]]
-                      ]]
-                passthroughBehavior: when_no_match
-                requestTemplates:
-                  application/json: "{\"statusCode\": 200}"
-                type: mock
+          # Marketplace support is currently broken
+          # /marketplace-confirm/{usagePlanId}:
+          #   post:
+          #     security:
+          #     - sigv4: []
+          #     produces:
+          #     - application/json
+          #     responses: {}
+          #     x-amazon-apigateway-integration:
+          #       uri: !Join
+          #         - ''
+          #         - - !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function
+          #           - :${stageVariables.DevPortalFunctionName}/invocations
+          #       httpMethod: POST
+          #       type: aws_proxy
+          #   options:
+          #     consumes:
+          #     - application/json
+          #     produces:
+          #     - application/json
+          #     responses:
+          #       '200':
+          #         description: 200 response
+          #         schema:
+          #           $ref: "#/definitions/Empty"
+          #         headers:
+          #           Access-Control-Allow-Origin:
+          #             type: string
+          #           Access-Control-Allow-Methods:
+          #             type: string
+          #           Access-Control-Allow-Headers:
+          #             type: string
+          #     x-amazon-apigateway-integration:
+          #       responses:
+          #         default:
+          #           statusCode: 200
+          #           responseParameters:
+          #             method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+          #             method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+          #             method.response.header.Access-Control-Allow-Origin: !If [ 'LocalDevelopmentMode', "'*'", !If [
+          #               'UseCustomDomainName',
+          #               !Join ['', [ "'https://", !Ref CustomDomainName, "'" ]],
+          #               !Join ['', [ "'https://", !GetAtt DefaultCloudfrontDistribution.DomainName, "'" ]]
+          #             ]]
+          #       passthroughBehavior: when_no_match
+          #       requestTemplates:
+          #         application/json: "{\"statusCode\": 200}"
+          #       type: mock
           /catalog:
             get:
               security:
@@ -335,7 +407,7 @@ Resources:
                     responseParameters:
                       method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
                       method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-                      method.response.header.Access-Control-Allow-Origin: !If [ 'DevelopmentMode', "'*'", !If [
+                      method.response.header.Access-Control-Allow-Origin: !If [ 'LocalDevelopmentMode', "'*'", !If [
                         'UseCustomDomainName',
                         !Join ['', [ "'https://", !Ref CustomDomainName, "'" ]],
                         !Join ['', [ "'https://", !GetAtt DefaultCloudfrontDistribution.DomainName, "'" ]]
@@ -408,7 +480,7 @@ Resources:
                     responseParameters:
                       method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
                       method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-                      method.response.header.Access-Control-Allow-Origin: !If [ 'DevelopmentMode', "'*'", !If [
+                      method.response.header.Access-Control-Allow-Origin: !If [ 'LocalDevelopmentMode', "'*'", !If [
                         'UseCustomDomainName',
                         !Join ['', [ "'https://", !Ref CustomDomainName, "'" ]],
                         !Join ['', [ "'https://", !GetAtt DefaultCloudfrontDistribution.DomainName, "'" ]]
@@ -468,7 +540,7 @@ Resources:
                     responseParameters:
                       method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
                       method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-                      method.response.header.Access-Control-Allow-Origin: !If [ 'DevelopmentMode', "'*'", !If [
+                      method.response.header.Access-Control-Allow-Origin: !If [ 'LocalDevelopmentMode', "'*'", !If [
                         'UseCustomDomainName',
                         !Join ['', [ "'https://", !Ref CustomDomainName, "'" ]],
                         !Join ['', [ "'https://", !GetAtt DefaultCloudfrontDistribution.DomainName, "'" ]]
@@ -520,7 +592,7 @@ Resources:
                     responseParameters:
                       method.response.header.Access-Control-Allow-Methods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
                       method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
-                      method.response.header.Access-Control-Allow-Origin: !If [ 'DevelopmentMode', "'*'", !If [
+                      method.response.header.Access-Control-Allow-Origin: !If [ 'LocalDevelopmentMode', "'*'", !If [
                         'UseCustomDomainName',
                         !Join ['', [ "'https://", !Ref CustomDomainName, "'" ]],
                         !Join ['', [ "'https://", !GetAtt DefaultCloudfrontDistribution.DomainName, "'" ]]
@@ -548,6 +620,11 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Ref DevPortalSiteS3BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
   DevPortalSiteS3BucketPolicy:
     Type: 'AWS::S3::BucketPolicy'
@@ -568,6 +645,11 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Ref ArtifactsS3BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       NotificationConfiguration:
         LambdaConfigurations:
           -
@@ -596,26 +678,42 @@ Resources:
       AttributeDefinitions:
       - AttributeName: Id
         AttributeType: S
-      - AttributeName: MarketplaceCustomerId
-        AttributeType: S
+      # Marketplace support is currently broken
+      # - AttributeName: MarketplaceCustomerId
+      #   AttributeType: S
       KeySchema:
       - AttributeName: Id
         KeyType: HASH
       ProvisionedThroughput:
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
-      GlobalSecondaryIndexes:
-      - IndexName: MarketplaceCustomerIdIndex
-        KeySchema:
-        - AttributeName: MarketplaceCustomerId
-          KeyType: HASH
-        Projection:
-          NonKeyAttributes:
-          - ApiKeyId
-          ProjectionType: INCLUDE
-        ProvisionedThroughput:
-          ReadCapacityUnits: 5
-          WriteCapacityUnits: 5
+      # Marketplace support is currently broken
+      # GlobalSecondaryIndexes:
+      # - IndexName: MarketplaceCustomerIdIndex
+      #   KeySchema:
+      #   - AttributeName: MarketplaceCustomerId
+      #     KeyType: HASH
+      #   Projection:
+      #     NonKeyAttributes:
+      #     - ApiKeyId
+      #     ProjectionType: INCLUDE
+      #   ProvisionedThroughput:
+      #     ReadCapacityUnits: 5
+      #     WriteCapacityUnits: 5
+
+  PreLoginAccountsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DevPortalPreLoginAccountsTableName
+      AttributeDefinitions:
+      - AttributeName: UserId
+        AttributeType: S
+      KeySchema:
+      - AttributeName: UserId
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
 
   FeedbackTable:
     Type: AWS::DynamoDB::Table
@@ -639,8 +737,8 @@ Resources:
         Projection:
           ProjectionType: KEYS_ONLY
         ProvisionedThroughput:
-          ReadCapacityUnits: '5'
-          WriteCapacityUnits: '5'
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
 
   FeedbackSubmittedSNSTopic:
     Type: AWS::SNS::Topic
@@ -696,10 +794,11 @@ Resources:
                 - '::/restapis/'
                 - !Ref ApiGatewayApi
                 - '/*/exports/*'
-          - Effect: Allow
-            Action:
-            - aws-marketplace:ResolveCustomer
-            Resource: '*'
+          # Marketplace support is currently broken
+          # - Effect: Allow
+          #   Action:
+          #   - aws-marketplace:ResolveCustomer
+          #   Resource: '*'
           - Effect: Allow
             Action:
             - dynamodb:GetItem
@@ -718,16 +817,26 @@ Resources:
                 - !Ref CustomersTable
           - Effect: Allow
             Action:
+            - dynamodb:GetItem
             - dynamodb:Query
-            Resource: !Join
-              - ''
-              - - 'arn:aws:dynamodb:'
-                - !Ref 'AWS::Region'
-                - ':'
-                - !Ref 'AWS::AccountId'
-                - :table/
-                - !Ref CustomersTable
-                - /index/MarketplaceCustomerIdIndex
+            - dynamodb:Scan
+            - dynamodb:PutItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            Resource: !GetAtt PreLoginAccountsTable.Arn
+          # Marketplace support is currently broken
+          # - Effect: Allow
+          #   Action:
+          #   - dynamodb:Query
+          #   Resource: !Join
+          #     - ''
+          #     - - 'arn:aws:dynamodb:'
+          #       - !Ref 'AWS::Region'
+          #       - ':'
+          #       - !Ref 'AWS::AccountId'
+          #       - :table/
+          #       - !Ref CustomersTable
+          #       - /index/MarketplaceCustomerIdIndex
           - Effect: Allow
             Action:
             - lambda:InvokeFunction
@@ -756,8 +865,18 @@ Resources:
               - sns:Publish
               Resource: !Ref FeedbackSubmittedSNSTopic
             - !Ref 'AWS::NoValue'
+          - Effect: Allow
+            Action:
+              - cognito-idp:ListUsers
+              - cognito-idp:ListUsersInGroup
+              - cognito-idp:AdminAddUserToGroup
+              - cognito-idp:AdminCreateUser
+              - cognito-idp:AdminDeleteUser
+              - cognito-idp:AdminGetUser
+              - cognito-idp:AdminListGroupsForUser
+            Resource: !GetAtt CognitoUserPool.Arn
 
-  CognitoStrategyLambdaExecutionRole:
+  CognitoPreSignupTriggerExecutionRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -779,6 +898,74 @@ Resources:
             - logs:CreateLogStream
             - logs:PutLogEvents
             Resource: arn:aws:logs:*:*:*
+
+  CognitoPostConfirmationTriggerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: '/'
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+              - dynamodb:PutItem
+            Resource: !GetAtt PreLoginAccountsTable.Arn
+          - Effect: Allow
+            Action:
+              - cognito-idp:AdminAddUserToGroup
+            Resource: !GetAtt CognitoUserPool.Arn
+
+  CognitoPostAuthenticationTriggerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: '/'
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+              - dynamodb:Scan
+              - dynamodb:PutItem
+            Resource: !GetAtt CustomersTable.Arn
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+            Resource: !GetAtt PreLoginAccountsTable.Arn
+          - Effect: Allow
+            Action:
+              - cognito-idp:AdminAddUserToGroup
+            Resource: !GetAtt CognitoUserPool.Arn
 
   CatalogUpdaterLambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -906,30 +1093,31 @@ Resources:
                 - !Ref ArtifactsS3BucketName
                 - '/*'
 
-  ApiGatewayMarketplaceMeteringRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: !Join
-        - ''
-        - - !Ref AWS::StackName
-          - 'MeteringRole'
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          Effect: Allow
-          Principal:
-            Service: apigateway.amazonaws.com
-          Action: sts:AssumeRole
-      Policies:
-      - PolicyName: ApiGatewayMeteringPolicy
-        PolicyDocument:
-          Version: '2012-10-17'
-          Statement:
-          - Action:
-            - aws-marketplace:BatchMeterUsage
-            - aws-marketplace:ResolveCustomer
-            Effect: Allow
-            Resource: '*'
+  # Marketplace support is currently broken
+  # ApiGatewayMarketplaceMeteringRole:
+  #   Type: AWS::IAM::Role
+  #   Properties:
+  #     RoleName: !Join
+  #       - ''
+  #       - - !Ref AWS::StackName
+  #         - 'MeteringRole'
+  #     AssumeRolePolicyDocument:
+  #       Version: '2012-10-17'
+  #       Statement:
+  #         Effect: Allow
+  #         Principal:
+  #           Service: apigateway.amazonaws.com
+  #         Action: sts:AssumeRole
+  #     Policies:
+  #     - PolicyName: ApiGatewayMeteringPolicy
+  #       PolicyDocument:
+  #         Version: '2012-10-17'
+  #         Statement:
+  #         - Action:
+  #           - aws-marketplace:BatchMeterUsage
+  #           - aws-marketplace:ResolveCustomer
+  #           Effect: Allow
+  #           Resource: '*'
 
   LambdaApiGatewayExecutionPermission:
     Type: AWS::Lambda::Permission
@@ -947,11 +1135,11 @@ Resources:
           - !Ref ApiGatewayApi
           - '/*/*'
 
-  LambdaCognitoUserPoolExecutionPermission:
+  CognitoPreSignupTriggerFnExecutionPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !GetAtt CognitoUserPoolsConfirmationStrategyFunction.Arn
+      FunctionName: !GetAtt CognitoPreSignupTriggerFn.Arn
       Principal: cognito-idp.amazonaws.com
       SourceArn: !Join
         - ''
@@ -962,30 +1150,69 @@ Resources:
           - ':userpool/'
           - !Ref CognitoUserPool
 
-  LambdaSNSExecutionPermission:
+  CognitoPostConfirmationTriggerFnExecutionPermission:
     Type: AWS::Lambda::Permission
     Properties:
       Action: lambda:InvokeFunction
-      FunctionName: !GetAtt SubscriptionListenerLambdaFunction.Arn
-      Principal: sns.amazonaws.com
+      FunctionName: !GetAtt CognitoPostConfirmationTriggerFn.Arn
+      Principal: cognito-idp.amazonaws.com
       SourceArn: !Join
         - ''
-        - - 'arn:aws:sns:us-east-1:287250355862:aws-mp-subscription-notification-'
-          - !Ref MarketplaceSubscriptionTopicProductCode
-
-  LambdaSNSExecutionTestPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      Action: lambda:InvokeFunction
-      FunctionName: !GetAtt SubscriptionListenerLambdaFunction.Arn
-      Principal: sns.amazonaws.com
-      SourceArn: !Join
-        - ''
-        - - 'arn:aws:sns:'
+        - - 'arn:aws:cognito-idp:'
           - !Ref 'AWS::Region'
           - ':'
           - !Ref 'AWS::AccountId'
-          - ':marketplace-test-topic'
+          - ':userpool/'
+          - !Ref CognitoUserPool
+
+  CognitoPostAuthenticationTriggerFnExecutionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt CognitoPostAuthenticationTriggerFn.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !Join
+        - ''
+        - - 'arn:aws:cognito-idp:'
+          - !Ref 'AWS::Region'
+          - ':'
+          - !Ref 'AWS::AccountId'
+          - ':userpool/'
+          - !Ref CognitoUserPool
+
+  # Marketplace support is currently broken
+  # LambdaSNSExecutionPermission:
+  #   Type: AWS::Lambda::Permission
+  #   Properties:
+  #     Action: lambda:InvokeFunction
+  #     FunctionName: !GetAtt SubscriptionListenerLambdaFunction.Arn
+  #     Principal: sns.amazonaws.com
+  #     SourceArn: !Join
+  #       - ''
+  #       - - 'arn:aws:sns:us-east-1:287250355862:aws-mp-subscription-notification-'
+  #         - !Ref MarketplaceSubscriptionTopicProductCode
+  #
+  # LambdaSNSExecutionTestPermission:
+  #   Type: AWS::Lambda::Permission
+  #   Properties:
+  #     Action: lambda:InvokeFunction
+  #     FunctionName: !GetAtt SubscriptionListenerLambdaFunction.Arn
+  #     Principal: sns.amazonaws.com
+  #     SourceArn: !Join
+  #       - ''
+  #       - - 'arn:aws:sns:'
+  #         - !Ref 'AWS::Region'
+  #         - ':'
+  #         - !Ref 'AWS::AccountId'
+  #         - ':marketplace-test-topic'
+
+  LambdaCommonLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      Description: 'Common code used by lambdas'
+      ContentUri: ../lambdas/common-layer/
+      CompatibleRuntimes:
+        - nodejs12.x
 
   DevPortalLambdaFunction:
     Type: AWS::Serverless::Function
@@ -994,18 +1221,23 @@ Resources:
       Handler: index.handler
       MemorySize: 1024
       Role: !GetAtt BackendLambdaExecutionRole.Arn
-      Runtime: nodejs8.10
+      Runtime: nodejs12.x
       Timeout: 30
       Environment:
         Variables:
+          NODE_ENV: production
           WEBSITE_BUCKET_NAME: !Ref DevPortalSiteS3BucketName
           StaticBucketName: !Ref ArtifactsS3BucketName
           CustomersTableName: !Ref DevPortalCustomersTableName
+          PreLoginAccountsTableName: !Ref DevPortalPreLoginAccountsTableName
           CatalogUpdaterFunctionArn: !GetAtt CatalogUpdaterLambdaFunction.Arn
           FeedbackTableName: !Ref DevPortalFeedbackTableName
           FeedbackSnsTopicArn:
             !If [EnableFeedbackSubmission, !Ref FeedbackSubmittedSNSTopic, '']
-
+          UserPoolId: !Ref CognitoUserPool
+          AdminsGroupName: !Join ['', [!Ref 'AWS::StackName', 'AdminsGroup']]
+          RegisteredGroupName: !Sub '${AWS::StackName}-RegisteredGroup'
+          DevelopmentMode: !Ref DevelopmentMode
       # Adds the API as a trigger
       Events:
         ProxyApiRoot:
@@ -1020,33 +1252,104 @@ Resources:
             RestApiId: !Ref ApiGatewayApi
             Path: /{proxy+}
             Method: ANY
+      Layers:
+        - !Ref LambdaCommonLayer
 
-  SubscriptionListenerLambdaFunction:
+  # Marketplace support is currently broken
+  # SubscriptionListenerLambdaFunction:
+  #   Type: AWS::Serverless::Function
+  #   Properties:
+  #     CodeUri: ../lambdas/listener
+  #     Handler: index.handler
+  #     MemorySize: 128
+  #     Role: !GetAtt BackendLambdaExecutionRole.Arn
+  #     Runtime: nodejs12.x
+  #     Timeout: 30
+  #     Layers:
+  #       - !Ref LambdaCommonLayer
+
+  CognitoPreSignupTriggerFn:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ../lambdas/listener
+      FunctionName: !Sub '${AWS::StackName}-CognitoPreSignupTriggerFn'
+      CodeUri: ../lambdas/cognito-pre-signup-trigger
       Handler: index.handler
       MemorySize: 128
-      Role: !GetAtt BackendLambdaExecutionRole.Arn
-      Runtime: nodejs8.10
-      Timeout: 30
-
-  CognitoUserPoolsConfirmationStrategyFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: ../lambdas/cognito-user-pools-confirmation-strategy
-      Handler: index.handler
-      MemorySize: 128
-      Role: !GetAtt CognitoStrategyLambdaExecutionRole.Arn
-      Runtime: nodejs8.10
+      Role: !GetAtt CognitoPreSignupTriggerExecutionRole.Arn
+      Runtime: nodejs12.x
       Timeout: 3
+      Environment:
+        Variables:
+          AccountRegistrationMode: !Ref AccountRegistrationMode
+      Layers:
+        - !Ref LambdaCommonLayer
+
+  CognitoPostConfirmationTriggerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-CognitoPostConfirmationTriggerFn'
+      CodeUri: ../lambdas/cognito-post-confirmation-trigger
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt CognitoPostConfirmationTriggerExecutionRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 3
+      Environment:
+        Variables:
+          AccountRegistrationMode: !Ref AccountRegistrationMode
+          PreLoginAccountsTableName: !Ref DevPortalPreLoginAccountsTableName
+          RegisteredGroupName: !Sub '${AWS::StackName}-RegisteredGroup'
+      Layers:
+        - !Ref LambdaCommonLayer
+
+  CognitoPostAuthenticationTriggerFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-CognitoPostAuthenticationTriggerFn'
+      CodeUri: ../lambdas/cognito-post-authentication-trigger
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt CognitoPostAuthenticationTriggerExecutionRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 3
+      Environment:
+        Variables:
+          CustomersTableName: !Ref DevPortalCustomersTableName
+          PreLoginAccountsTableName: !Ref DevPortalPreLoginAccountsTableName
+          RegisteredGroupName: !Sub '${AWS::StackName}-RegisteredGroup'
+      Layers:
+        - !Ref LambdaCommonLayer
 
   CognitoUserPool:
     Type: AWS::Cognito::UserPool
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       UserPoolName: !Ref CognitoIdentityPoolName
+      # Lambda trigger caveats:
+      #
+      # - We can't use the functions' ARNs here, because there would be a
+      #   circular dependency: some functions reference either the UserPool or
+      #   UserPoolGroups within it.
+      #
+      # - You must declare an AWS::Lambda::Permission for each lambda here, or
+      #   else calls from Cognito will fail with an AccessDeniedException. See
+      #   `CognitoPreSignupTriggerFnExecutionPermission` as an example. More
+      #   reading: <https://stackoverflow.com/a/42460847> and
+      #   <https://forums.aws.amazon.com/thread.jspa?messageID=748566#748566>
       LambdaConfig:
-        PreSignUp: !GetAtt CognitoUserPoolsConfirmationStrategyFunction.Arn
+        PreSignUp: !Join
+          - ''
+          - - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:'
+            - !Sub '${AWS::StackName}-CognitoPreSignupTriggerFn'
+        PostConfirmation: !Join
+          - ''
+          - - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:'
+            - !Sub '${AWS::StackName}-CognitoPostConfirmationTriggerFn'
+        PostAuthentication: !Join
+          - ''
+          - - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:'
+            - !Sub '${AWS::StackName}-CognitoPostAuthenticationTriggerFn'
       Policies:
         PasswordPolicy:
           MinimumLength: 12
@@ -1055,7 +1358,38 @@ Resources:
       Schema:
         - AttributeDataType: String
           Name: email
-          Required: false
+          Required: true
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: !If [
+          InviteAccountRegistrationMode, true, false,
+        ]
+        InviteMessageTemplate:
+          EmailSubject: 'Developer Portal - Invitation'
+          EmailMessage: !Join [ '', [
+            '<h2>Developer Portal</h2><p>You have been invited to access the developer portal at <a href="',
+            !If [ 'DevelopmentMode',
+              !Join [ '', [ 'https://', !GetAtt DevPortalSiteS3Bucket.RegionalDomainName, '/index.html' ]],
+              !If [
+                'UseCustomDomainName',
+                !Join [ '', [ 'https://', !Ref CustomDomainName ]],
+                !Join [ '', [ 'https://', !GetAtt DefaultCloudfrontDistribution.DomainName ]]
+              ]
+            ],
+            '">',
+            !If [ 'DevelopmentMode',
+              !Join [ '', [ 'https://', !GetAtt DevPortalSiteS3Bucket.RegionalDomainName, '/index.html' ]],
+              !If [
+                'UseCustomDomainName',
+                !Join [ '', [ 'https://', !Ref CustomDomainName ]],
+                !Join [ '', [ 'https://', !GetAtt DefaultCloudfrontDistribution.DomainName ]]
+              ]
+            ],
+            '</a>.</p><p><b>Username:</b> {username}<br><b>Temporary password:</b> {####}</p>'
+          ] ]
+      AutoVerifiedAttributes: ['email']
+      UsernameAttributes: ['email']
+      EmailVerificationSubject: 'Developer Portal - Verification Code'
+      EmailVerificationMessage: '<h2>Developer Portal</h2><p>Your verification code is <b>{####}</b></p>'
 
   CognitoUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
@@ -1068,6 +1402,7 @@ Resources:
       ClientName: CognitoIdentityPool
       GenerateSecret: false
       RefreshTokenValidity: 30
+      PreventUserExistenceErrors: ENABLED
 
   CognitoUserPoolClientSettingsBackingFnRole:
     Type: 'AWS::IAM::Role'
@@ -1104,12 +1439,14 @@ Resources:
   CognitoUserPoolClientSettingsBackingFn:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: nodejs8.10
+      Runtime: nodejs12.x
       MemorySize: 128
       Timeout: 300
       CodeUri: ../lambdas/cfn-cognito-user-pools-client-settings
       Handler: index.handler
       Role: !GetAtt CognitoUserPoolClientSettingsBackingFnRole.Arn
+      Layers:
+        - !Ref LambdaCommonLayer
 
   CognitoUserPoolClientSettings:
     Type: AWS::CloudFormation::CustomResource
@@ -1119,22 +1456,24 @@ Resources:
       UserPoolId: !Ref CognitoUserPool
       UserPoolClientId: !Ref CognitoUserPoolClient
       SupportedIdentityProviders: [ "COGNITO" ] # should (eventually) allow people to add values
-      CallbackURL: !If [ DevelopmentMode,
+      CallbackURL: !If [ LocalDevelopmentMode,
         [
           'http://localhost:3000/index.html?action=login',
-          !Join [ '', [ 'https://', !GetAtt DevPortalSiteS3Bucket.RegionalDomainName, '/index.html?action=login' ]]
+          !Join [ '', [ 'https://', !GetAtt DevPortalSiteS3Bucket.RegionalDomainName, '/index.html?action=login' ]],
+          !Join [ '', [ 'https://', !If [ NoCustomDomainName, !GetAtt DefaultCloudfrontDistribution.DomainName, !Ref CustomDomainName ], '/index.html?action=login' ]]
         ],
         [
-          !Join [ '', [ 'https://', !If [ UseCustomDomainName, !Ref CustomDomainName, !GetAtt DefaultCloudfrontDistribution.DomainName ], '/index.html?action=login' ]]
+          !Join [ '', [ 'https://', !If [ NoCustomDomainName, !GetAtt DefaultCloudfrontDistribution.DomainName, !Ref CustomDomainName ], '/index.html?action=login' ]]
         ]
       ]
-      LogoutURL: !If [ DevelopmentMode,
+      LogoutURL: !If [ LocalDevelopmentMode,
         [
           'http://localhost:3000/index.html?action=logout',
-          !Join [ '', [ 'https://', !GetAtt DevPortalSiteS3Bucket.RegionalDomainName, '/index.html?action=logout' ]]
+          !Join [ '', [ 'https://', !GetAtt DevPortalSiteS3Bucket.RegionalDomainName, '/index.html?action=logout' ]],
+          !Join [ '', [ 'https://', !If [ NoCustomDomainName, !GetAtt DefaultCloudfrontDistribution.DomainName, !Ref CustomDomainName ], '/index.html?action=logout' ]],
         ],
         [
-          !Join [ '', [ 'https://', !If [ UseCustomDomainName, !Ref CustomDomainName, !GetAtt DefaultCloudfrontDistribution.DomainName ], '/index.html?action=logout' ]]
+          !Join [ '', [ 'https://', !If [ NoCustomDomainName, !GetAtt DefaultCloudfrontDistribution.DomainName, !Ref CustomDomainName ], '/index.html?action=logout' ]],
         ]
       ]
       AllowedOAuthFlowsUserPoolClient: true
@@ -1184,12 +1523,14 @@ Resources:
   CognitoUserPoolDomainBackingFn:
     Type: AWS::Serverless::Function
     Properties:
-      Runtime: nodejs8.10
+      Runtime: nodejs12.x
       MemorySize: 128
       Timeout: 300
       CodeUri: ../lambdas/cfn-cognito-user-pools-domain
       Handler: index.handler
       Role: !GetAtt CognitoUserPoolDomainBackingFnRole.Arn
+      Layers:
+        - !Ref LambdaCommonLayer
 
   CognitoUserPoolDomain:
     Type: AWS::CloudFormation::CustomResource
@@ -1220,6 +1561,7 @@ Resources:
       Roles:
         authenticated: !GetAtt CognitoAuthenticatedRole.Arn
 
+  # Every logged-in Cognito user is "authenticated".
   CognitoAuthenticatedRole:
     Type: AWS::IAM::Role
     Properties:
@@ -1251,19 +1593,41 @@ Resources:
                 - !Ref 'AWS::AccountId'
                 - ':'
                 - !Ref ApiGatewayApi
-                - /prod/*/*
+                - /prod/*/signin
+      Path: '/'
+
+  # A logged-in Cognito user, who is not in a "pending" (invite or request)
+  # state, is "registered".
+  CognitoRegisteredRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Federated: cognito-identity.amazonaws.com
+          Action: sts:AssumeRoleWithWebIdentity
+          Condition:
+            StringEquals:
+              'cognito-identity.amazonaws.com:aud': !Ref CognitoIdentityPool
+            'ForAnyValue:StringLike':
+              'cognito-identity.amazonaws.com:amr': authenticated
+      Policies:
+      - PolicyName: CognitoRegisteredRole
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - execute-api:Invoke
+            Resource:
+            - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayApi}/prod/*'
           - Effect: Deny
             Action:
             - execute-api:Invoke
-            Resource: !Join
-              - ''
-              - - 'arn:aws:execute-api:'
-                - !Ref 'AWS::Region'
-                - ':'
-                - !Ref 'AWS::AccountId'
-                - ':'
-                - !Ref ApiGatewayApi
-                - /prod/*/admin/*
+            Resource:
+            - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayApi}/prod/*/admin/*'
       Path: '/'
 
   CognitoAdminRole:
@@ -1282,7 +1646,7 @@ Resources:
             'ForAnyValue:StringLike':
               'cognito-identity.amazonaws.com:amr': authenticated
       Policies:
-      - PolicyName: CognitoAuthenticatedRole
+      - PolicyName: CognitoAdminRole
         PolicyDocument:
           Version: '2012-10-17'
           Statement:
@@ -1301,6 +1665,8 @@ Resources:
 
   CognitoAdminsGroup:
     Type: AWS::Cognito::UserPoolGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       Description: 'Admin users of the developer portal'
       GroupName: !Join ['', [!Ref 'AWS::StackName', 'AdminsGroup']]
@@ -1310,6 +1676,17 @@ Resources:
       RoleArn: !GetAtt CognitoAdminRole.Arn
       UserPoolId: !Ref CognitoUserPool
 
+  CognitoRegisteredGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Description: 'Registered users in the developer portal'
+      GroupName: !Sub '${AWS::StackName}-RegisteredGroup'
+      Precedence: 1
+      RoleArn: !GetAtt CognitoRegisteredRole.Arn
+      UserPoolId: !Ref CognitoUserPool
+
   CatalogUpdaterLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -1317,11 +1694,13 @@ Resources:
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt CatalogUpdaterLambdaExecutionRole.Arn
-      Runtime: nodejs8.10
+      Runtime: nodejs12.x
       Timeout: 20
       Environment:
         Variables:
           BucketName: !Ref ArtifactsS3BucketName
+      Layers:
+        - !Ref LambdaCommonLayer
 
   CatalogUpdaterLambdaPermissions:
     Type: AWS::Lambda::Permission
@@ -1339,11 +1718,13 @@ Resources:
       Handler: index.handler
       MemorySize: 512
       Role: !GetAtt AssetUploaderLambdaExecutionRole.Arn
-      Runtime: nodejs8.10
+      Runtime: nodejs12.x
       Timeout: 300
       Environment:
         Variables:
           StaticBucketName: !Ref ArtifactsS3BucketName
+      Layers:
+        - !Ref LambdaCommonLayer
 
   StaticAssetUploader:
     Type: AWS::CloudFormation::CustomResource
@@ -1357,11 +1738,99 @@ Resources:
       UserPoolId: !Ref CognitoUserPool
       UserPoolClientId: !Ref CognitoUserPoolClient
       UserPoolDomain: !GetAtt CognitoUserPoolDomain.FullUrl
-      MarketplaceSuffix: !Ref MarketplaceSubscriptionTopicProductCode
+      # Marketplace support is currently broken
+      # MarketplaceSuffix: !Ref MarketplaceSubscriptionTopicProductCode
       RebuildToken: !Ref StaticAssetRebuildToken
       RebuildMode: !Ref StaticAssetRebuildMode
       DevelopmentMode: !Ref DevelopmentMode
       FeedbackEnabled: !If [ EnableFeedbackSubmission, 'true', 'false' ]
+
+  LambdaEdgeFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Sid: "AllowLambdaServiceToAssumeRole"
+            Effect: "Allow"
+            Action: 
+              - "sts:AssumeRole"
+            Principal:
+              Service: 
+                - "lambda.amazonaws.com"
+                - "edgelambda.amazonaws.com"
+
+  CloudFrontSecurityHeadersLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambdas/cloudfront-security
+      Handler: replicator.handler
+      MemorySize: 128
+      Role: !GetAtt CloudFrontEdgeReplicatorRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 300
+      AutoPublishAlias: Live
+      Environment:
+        Variables:
+          Bucket: !Ref ArtifactsS3BucketName
+      Layers:
+        - !Ref LambdaCommonLayer
+
+  CloudFrontSecurityHeadersSetup:
+    Type: AWS::CloudFormation::CustomResource
+    Properties:
+      ServiceToken: !GetAtt CloudFrontSecurityHeadersLambda.Arn
+      Name: !Ref CloudFrontSecurityHeadersLambda
+      RoleArn: !GetAtt LambdaEdgeFunctionRole.Arn
+      RebuildToken: !Ref EdgeLambdaRebuildToken
+  
+  CloudFrontEdgeReplicatorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Path: '/'
+      Policies:
+      - PolicyName: root
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+              - lambda:CreateFunction
+              - lambda:GetFunction
+              - lambda:UpdateFunctionCode
+              - lambda:PublishVersion
+            Resource: arn:aws:lambda:*:*:*
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/*'
+          - Effect: Allow
+            Action:
+            - s3:GetObject
+            - s3:DeleteObject
+            - s3:PutObject
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref ArtifactsS3BucketName
+                - '/*'
 
   CloudFrontOriginAccessIdentity:
     Type: 'AWS::CloudFront::CloudFrontOriginAccessIdentity'
@@ -1387,6 +1856,10 @@ Resources:
             QueryString: true
           TargetOriginId: 'dev-portal-site-s3-bucket'
           ViewerProtocolPolicy: redirect-to-https
+          LambdaFunctionAssociations:
+            -
+              EventType: origin-response
+              LambdaFunctionARN: !GetAtt CloudFrontSecurityHeadersSetup.EdgeArn
         DefaultRootObject: index.html
         Enabled: true
         Comment: !Sub '${AWS::StackName} distribution'
@@ -1416,6 +1889,10 @@ Resources:
             QueryString: true
           TargetOriginId: 'dev-portal-site-s3-bucket'
           ViewerProtocolPolicy: redirect-to-https
+          LambdaFunctionAssociations:
+            -
+              EventType: origin-response
+              LambdaFunctionARN: !GetAtt CloudFrontSecurityHeadersSetup.EdgeArn
         DefaultRootObject: index.html
         Enabled: true
         Comment: !Sub '${AWS::StackName} distribution'
@@ -1454,6 +1931,167 @@ Resources:
             # this is a "magic string" for using CFN aliases; see this link:
             # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-route53-aliastarget.html
             HostedZoneId: 'Z2FDTNDATAQYW2'
+
+  DumpV3AccountDataFn:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambdas/dump-v3-account-data
+      Handler: index.handler
+      MemorySize: 512
+      Role: !GetAtt DumpV3AccountDataExecutionRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 300
+      Environment:
+        Variables:
+          CustomersTableName: !Ref DevPortalCustomersTableName
+          UserPoolId: !Ref CognitoUserPool
+          AdminsGroupName: !Ref CognitoAdminsGroup
+      Layers:
+        - !Ref LambdaCommonLayer
+
+  DumpV3AccountDataExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: WriteCloudWatchLogs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+      - PolicyName: ReadCustomersTable
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: dynamodb:Scan
+            Resource: !GetAtt CustomersTable.Arn
+      - PolicyName: ListUserPool
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+              - cognito-idp:ListUsers
+              - cognito-idp:ListUsersInGroup
+            Resource: !GetAtt CognitoUserPool.Arn
+
+  UserGroupImporterLogsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: cognito-idp.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: WriteCloudWatchLogs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:DescribeLogStreams
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+
+  UserGroupImporterExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: WriteCloudWatchLogs
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+      - PolicyName: PassRole
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - iam:PassRole
+            Resource: !GetAtt UserGroupImporterLogsRole.Arn
+      - PolicyName: S3GetObject
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: s3:getObject
+            Resource: arn:aws:s3:::*/*
+      - PolicyName: RestoreTables
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:Scan
+            Resource: !If [
+              EnableFeedbackSubmission,
+              [
+                !GetAtt CustomersTable.Arn,
+                !GetAtt FeedbackTable.Arn,
+              ],
+              [
+                !GetAtt CustomersTable.Arn,
+              ],
+            ]
+      - PolicyName: UpdateCognitoUserList
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+              - cognito-idp:AdminCreateUser
+              - cognito-idp:AdminAddUserToGroup
+            Resource: !GetAtt CognitoUserPool.Arn
+  
+  UserGroupImporter:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../lambdas/user-group-importer
+      Handler: index.handler
+      MemorySize: 512
+      Role: !GetAtt UserGroupImporterExecutionRole.Arn
+      Runtime: nodejs12.x
+      # Use the default max timeout duration.
+      Timeout: 900
+      Environment:
+        Variables:
+          UserPoolId: !Ref CognitoUserPool
+          LogsRoleArn: !GetAtt UserGroupImporterLogsRole.Arn
+          AdminsGroup: !Ref CognitoAdminsGroup
+          RegisteredGroup: !Ref CognitoRegisteredGroup
+          CustomersTable: !Ref CustomersTable
+          FeedbackTable: !If [EnableFeedbackSubmission, !Ref FeedbackTable, !Ref AWS::NoValue]
+      
 
 Outputs:
   WebsiteURL:
