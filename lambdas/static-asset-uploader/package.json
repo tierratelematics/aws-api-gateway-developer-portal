@@ -1,6 +1,6 @@
 {
   "name": "serverless-developer-portal-static-asset-uploader",
-  "version": "3.0.2",
+  "version": "3.0.6",
   "description": "developer portal component responsible for uploading static assets to S3",
   "main": "index.js",
   "config": {},
@@ -12,7 +12,7 @@
     "aws-sdk": "^2.6.7",
     "fs-extra": "^7.0.0",
     "klaw": "^3.0.0",
-    "lodash": "^4.17.10",
+    "lodash": "^4.17.15",
     "through2": "^2.0.3"
   },
   "devDependencies": {}
